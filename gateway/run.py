@@ -2053,8 +2053,20 @@ class GatewayRunner:
             )
         asyncio.create_task(self._platform_reconnect_watcher())
 
+        # Eager MCP warm-up: spawn MCP subprocesses at gateway startup so
+        # the first Telegram tool call doesn't pay cold-start latency and
+        # users aren't stuck with "vault-daemon not registered" after a
+        # clean restart until they happen to send a message.
+        # Patched by vault-daemon diagnostic pass — safe to remove on upgrade.
+        try:
+            from tools.mcp_tool import discover_mcp_tools
+            warm_tools = await asyncio.to_thread(discover_mcp_tools)
+            logger.info("MCP eager warm-up: %d tool(s) registered", len(warm_tools))
+        except Exception as _warm_exc:
+            logger.warning("MCP eager warm-up skipped: %s", _warm_exc)
+
         logger.info("Press Ctrl+C to stop")
-        
+
         return True
     
     async def _session_expiry_watcher(self, interval: int = 300):

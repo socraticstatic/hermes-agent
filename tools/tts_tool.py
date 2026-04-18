@@ -2,7 +2,7 @@
 """
 Text-to-Speech Tool Module
 
-Supports seven TTS providers:
+Supports eight TTS providers:
 - Edge TTS (default, free, no API key): Microsoft Edge neural voices
 - ElevenLabs (premium): High-quality voices, needs ELEVENLABS_API_KEY
 - OpenAI TTS: Good quality, needs OPENAI_API_KEY
@@ -10,6 +10,7 @@ Supports seven TTS providers:
 - Mistral (Voxtral TTS): Multilingual, native Opus, needs MISTRAL_API_KEY
 - Google Gemini TTS: Controllable, 30 prebuilt voices, needs GEMINI_API_KEY
 - NeuTTS (local, free, no API key): On-device TTS via neutts_cli, needs neutts installed
+- VibeVoice (local sidecar): Helen-tuned voice via local sidecar on port 7843
 
 Output formats:
 - Opus (.ogg) for Telegram voice bubbles (requires ffmpeg for Edge TTS)
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 from tools.managed_tool_gateway import resolve_managed_tool_gateway
 from tools.tool_backend_helpers import managed_nous_tools_enabled, prefers_gateway, resolve_openai_audio_api_key
 from tools.xai_http import hermes_xai_user_agent
+from tools.tts_providers.vibevoice import synthesize_vibevoice, VibevoiceError
 
 # ---------------------------------------------------------------------------
 # Lazy imports -- providers are imported only when actually used to avoid
@@ -877,6 +879,40 @@ def text_to_speech_tool(
             logger.info("Generating speech with NeuTTS (local)...")
             _generate_neutts(text, file_str, tts_config)
 
+        elif provider == "vibevoice":
+            vb_voice = tts_config.get("voice") or "helen"
+            logger.info("Generating speech with VibeVoice (local sidecar)...")
+            _vibevoice_ok = False
+            try:
+                import concurrent.futures as _cf
+                with _cf.ThreadPoolExecutor(max_workers=1) as pool:
+                    audio_bytes = pool.submit(
+                        lambda: asyncio.run(synthesize_vibevoice(text, voice=vb_voice))
+                    ).result(timeout=90)
+                file_path.write_bytes(audio_bytes)
+                _vibevoice_ok = True
+            except RuntimeError:
+                # No running event loop in this thread — asyncio.run() directly
+                audio_bytes = asyncio.run(synthesize_vibevoice(text, voice=vb_voice))
+                file_path.write_bytes(audio_bytes)
+                _vibevoice_ok = True
+            except VibevoiceError as _vbe:
+                logger.warning("vibevoice failed: %s - falling back to ElevenLabs", _vbe)
+
+            if not _vibevoice_ok:
+                # ElevenLabs fallback
+                try:
+                    _import_elevenlabs()
+                except ImportError:
+                    return json.dumps({
+                        "success": False,
+                        "error": "VibeVoice sidecar unavailable and 'elevenlabs' package not installed. "
+                                 "Run: pip install elevenlabs"
+                    }, ensure_ascii=False)
+                logger.info("Falling back to ElevenLabs after VibeVoice failure...")
+                _generate_elevenlabs(text, file_str, tts_config)
+                provider = "elevenlabs"
+
         else:
             # Default: Edge TTS (free), with NeuTTS as local fallback
             edge_available = True
@@ -916,7 +952,7 @@ def text_to_speech_tool(
         # Try Opus conversion for Telegram compatibility
         # Edge TTS outputs MP3, NeuTTS outputs WAV — both need ffmpeg conversion
         voice_compatible = False
-        if provider in ("edge", "neutts", "minimax", "xai") and not file_str.endswith(".ogg"):
+        if provider in ("edge", "neutts", "minimax", "xai", "vibevoice") and not file_str.endswith(".ogg"):
             opus_path = _convert_to_opus(file_str)
             if opus_path:
                 file_str = opus_path
