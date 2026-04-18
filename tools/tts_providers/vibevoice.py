@@ -26,14 +26,27 @@ async def _get(url: str):
 
 
 async def synthesize_vibevoice(text: str, voice: str = "helen") -> bytes:
-    """Return WAV bytes from the local VibeVoice sidecar."""
-    r = await _post(f"{SIDECAR_URL}/synthesize", json={"text": text, "voice": voice, "format": "wav"})
+    """Return WAV bytes from the local VibeVoice sidecar.
+
+    Raises VibevoiceError on any network or HTTP failure so the caller's
+    fallback-to-ElevenLabs branch in tts_tool.py fires correctly.
+    """
+    try:
+        r = await _post(f"{SIDECAR_URL}/synthesize", json={"text": text, "voice": voice, "format": "wav"})
+    except httpx.HTTPError as e:
+        raise VibevoiceError(f"sidecar unreachable: {e.__class__.__name__}: {e}") from e
     if r.status_code != 200:
         body = getattr(r, "text", "") or str(r.json())
         raise VibevoiceError(f"sidecar {r.status_code}: {body}")
-    path = r.json()["path"]
+    try:
+        path = r.json()["path"]
+    except (KeyError, ValueError) as e:
+        raise VibevoiceError(f"sidecar returned malformed JSON: {e}") from e
     filename = path.rsplit("/", 1)[-1]
-    audio = await _get(f"{SIDECAR_URL}/audio/{filename}")
+    try:
+        audio = await _get(f"{SIDECAR_URL}/audio/{filename}")
+    except httpx.HTTPError as e:
+        raise VibevoiceError(f"audio fetch failed: {e.__class__.__name__}: {e}") from e
     if audio.status_code != 200:
         raise VibevoiceError(f"audio fetch {audio.status_code}")
     return audio.content

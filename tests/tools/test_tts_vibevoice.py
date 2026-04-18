@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 
@@ -58,3 +59,31 @@ async def test_http_error_raises_vibevoice_error():
         with pytest.raises(VibevoiceError) as ei:
             await synthesize_vibevoice("hello")
         assert "500" in str(ei.value)
+
+
+@pytest.mark.asyncio
+async def test_connect_error_raises_vibevoice_error():
+    """When sidecar is down (httpx.ConnectError), raise VibevoiceError so the
+    dispatch branch's fallback-to-ElevenLabs fires instead of propagating raw httpx."""
+    async def connect_refused(url, json=None):
+        raise httpx.ConnectError("connection refused")
+
+    with patch("tools.tts_providers.vibevoice._post", new=AsyncMock(side_effect=connect_refused)):
+        from tools.tts_providers.vibevoice import VibevoiceError, synthesize_vibevoice
+
+        with pytest.raises(VibevoiceError) as ei:
+            await synthesize_vibevoice("hello")
+        assert "unreachable" in str(ei.value).lower() or "connect" in str(ei.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_timeout_raises_vibevoice_error():
+    """ReadTimeout (slow model load on first request) also becomes VibevoiceError."""
+    async def timeout(url, json=None):
+        raise httpx.ReadTimeout("timeout reading /synthesize")
+
+    with patch("tools.tts_providers.vibevoice._post", new=AsyncMock(side_effect=timeout)):
+        from tools.tts_providers.vibevoice import VibevoiceError, synthesize_vibevoice
+
+        with pytest.raises(VibevoiceError):
+            await synthesize_vibevoice("hello")
