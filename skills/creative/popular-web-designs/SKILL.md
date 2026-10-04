@@ -132,7 +132,6 @@ those carry more visual identity than the specific font face.
 | `cursor.md` | Cursor | Sleek dark interface, gradient accents |
 | `expo.md` | Expo | Dark theme, tight letter-spacing, code-centric |
 | `linear.app.md` | Linear | Ultra-minimal dark-mode, precise, purple accent |
-| `lovable.md` | Lovable | Playful gradients, friendly dev aesthetic |
 | `mintlify.md` | Mintlify | Clean, green-accented, reading-optimized |
 | `posthog.md` | PostHog | Playful branding, developer-friendly dark UI |
 | `raycast.md` | Raycast | Sleek dark chrome, vibrant gradient accents |
@@ -201,7 +200,7 @@ Match the design to the content:
 - **Marketing / landing pages:** Stripe, Framer, Apple, SpaceX
 - **Dark mode UIs:** Linear, Cursor, ElevenLabs, Warp, Superhuman
 - **Light / clean UIs:** Vercel, Stripe, Notion, Cal.com, Replicate
-- **Playful / friendly:** PostHog, Figma, Lovable, Zapier, Miro
+- **Playful / friendly:** PostHog, Figma, Zapier, Miro
 - **Premium / luxury:** Apple, BMW, Stripe, Superhuman, Revolut
 - **Data-dense / dashboards:** Sentry, Kraken, Cohere, ClickHouse
 - **Monospace / terminal aesthetic:** Ollama, OpenCode, x.ai, VoltAgent
